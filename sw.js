@@ -1,7 +1,7 @@
 // Offline shell. Changing this cache revision causes installed apps to refresh code.
-const CACHE_NAME = 'setwise-shell-v1.0.0';
+const CACHE_NAME = 'setwise-shell-v1.1.0';
 const SHELL = [
-  './', './index.html', './styles.css', './app.js', './db.js',
+  './', './index.html', './styles.css', './app.js', './db.js', './progression.js',
   './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png'
 ];
 self.addEventListener('install', event => {
