@@ -1,27 +1,24 @@
 # Setwise changelog
 
-## v1.1.0 — 2026-11-15
+## 1.2.0 — 18 November 2026
 
-- Added repeating 2-minute live rest timer after first set, stopping at workout finish; never stored in workout records.
-- Increased +/- touch targets and font sizes on iPad/mobile.
-- Added rolling historical average exercise volume and today's average working weight in the exercise panel.
-- Added estimated six-rep load using Epley from recent eligible sets with cautious interpretation.
-- Added conservative next-set encouragement and next-workout targets, including a two-session progression readiness signal.
-- No database/schema changes; existing v1.0 workout records remain valid.
-- Upgraded offline cache revision, and added `progression.js` to offline shell.
+- OLED-friendly true-black theme, light-grey typography, muted pastel-red accents, graphics and icons.
+- Sticky workout header: weight, reps, current local time, two-minute repeating rest timer, target range, and Save & Next Set / Save & Next Exercise actions.
+- Rest timer begins on first saved set, resets after **every** saved set and stops on Finish Workout. It is never stored, exported or synced.
+- Larger weight and rep controls.
+- Compact workout page: working-set ordinal average vs last comparable working set; optional RIR; immediate next-set coaching; collapsible set history.
+- Separately log warm-up and working sets; warm-up sets excluded from strength, volume and working-set position comparisons. Old sets remain working sets for backwards compatibility.
+- 3, 7 or more working sets accepted without a fixed cap; optional per-exercise planned set count still supported.
+- Full Analytics page from stored workout history: Epley estimated 6RM/1RM, trend, top-set weight and session-volume charts, average working-set volume, next workout and warm-up suggestions.
+- Optional bodyweight in Analytics and equipment-aware relative strength analysis. Machine load is *not* treated as a universal bodyweight strength standard.
+- Exercise equipment type can be set in the exercise editor. New JSON backups and Numbers CSV include set types and RIR.
+- IndexedDB name, object-store name, key and schema version **unchanged**, with optional field validation and legacy data conversion.
+- Offline cache revision updated to v1.2.0.
 
-# Setwise changelog
+## 1.1.0
 
-## 1.0.0 — Initial release · 15 November 2026
+- Live rest clock, larger +/- buttons, six-rep estimates and progression targets.
 
-- Offline-first PWA with installation manifest and service worker.
-- Local, versioned IndexedDB workout database.
-- Seven training groups and editable machine/exercise library.
-- Set-level logging with previous-session and rolling five-session comparisons.
-- Completed session history and correctable recorded sets.
-- Strength trends and average weights/reps by set number.
-- Manual JSON recovery backup and restore.
-- Numbers-compatible CSV export.
-- Automated regression coverage for the primary training flow.
+## 1.0.0
 
-**Safe-update policy:** Keep the same site origin and database name; back up before major updates; increment service worker cache version when shipping new code.
+- Offline-first workout logging, local history, exercise management, JSON backup and CSV export.

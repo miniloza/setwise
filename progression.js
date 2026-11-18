@@ -1,11 +1,11 @@
 // Pure, conservative training estimates. No workout data is changed or stored here.
 export const TARGET_REPS = 6;
 export const REST_CYCLE_SECONDS = 120;
-const isValid = t => t && Number.isFinite(t.weight) && t.weight > 0 && Number.isInteger(t.reps) && t.reps >= 1 && t.reps <= 10;
+const isValid = t => t && t.kind !== 'warmup' && Number.isFinite(t.weight) && t.weight > 0 && Number.isInteger(t.reps) && t.reps >= 1 && t.reps <= 10;
 export function trainingVolume(sets) { return sets.reduce((n,t)=>n+t.weight*t.reps,0); }
 export function averageExerciseVolume(sessions, exerciseId, limit=5) {
   const values=sessions.filter(s=>s.endedAt).filter(s=>s.sets.some(t=>t.exerciseId===exerciseId)).slice(0,limit)
-    .map(s=>trainingVolume(s.sets.filter(t=>t.exerciseId===exerciseId)));
+    .map(s=>trainingVolume(s.sets.filter(t=>t.exerciseId===exerciseId && t.kind !== 'warmup')));
   return values.length?{average:values.reduce((a,b)=>a+b,0)/values.length,count:values.length}:null;
 }
 export function sixRepEstimate(sets) {

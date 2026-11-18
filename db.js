@@ -27,10 +27,10 @@ export function defaultData() {
   return {
     schemaVersion: DATA_SCHEMA_VERSION,
     exercises: Object.entries(EXERCISE_SEEDS).flatMap(([bodyPart,names]) => names.map(name => ({
-      id: makeId(), name, bodyPart, targetSets: 3, archived: false, order: order++
+      id: makeId(), name, bodyPart, targetSets: 3, archived: false, order: order++, equipment: 'auto'
     }))),
     sessions: [],
-    settings: { incrementKg: 2.5, lastBackupAt: null }
+    settings: { incrementKg: 2.5, lastBackupAt: null, bodyweightKg: null }
   };
 }
 
@@ -87,6 +87,7 @@ export function validateData(candidate) {
     if (!e || typeof e.id !== 'string' || !e.id || exerciseIds.has(e.id) || typeof e.name !== 'string' || !e.name.trim() || e.name.length > 160 || !GROUPS.includes(e.bodyPart) || !Number.isInteger(e.targetSets) || e.targetSets < 1 || e.targetSets > 20 || typeof e.archived !== 'boolean') {
       throw new Error('Backup contains an invalid exercise. Nothing was changed.');
     }
+    if(e.equipment != null && !['auto','machine','barbell','dumbbell','bodyweight','other'].includes(e.equipment)) throw new Error('Backup contains an invalid equipment type.');
     exerciseIds.add(e.id);
   }
   const sessionIds = new Set();
@@ -100,6 +101,8 @@ export function validateData(candidate) {
       if (!t || typeof t.id !== 'string' || !t.id || setIds.has(t.id) || !exerciseIds.has(t.exerciseId) || !Number.isInteger(t.setNumber) || t.setNumber < 1 || t.setNumber > 1000 || !finiteNumber(t.weight) || t.weight < 0 || t.weight > 10000 || !Number.isInteger(t.reps) || t.reps < 1 || t.reps > 10000 || !safeDate(t.createdAt)) {
         throw new Error('Backup contains an invalid set. Nothing was changed.');
       }
+      if(t.kind!=null && !['working','warmup'].includes(t.kind))throw new Error('Backup contains an invalid set type.');
+      if(t.rir!=null && (!Number.isInteger(t.rir)||t.rir<0||t.rir>4))throw new Error('Backup contains an invalid effort rating.');
       setIds.add(t.id);
     }
   }
@@ -107,11 +110,12 @@ export function validateData(candidate) {
   const settings = candidate.settings || {};
   const incrementKg = finiteNumber(settings.incrementKg) && settings.incrementKg > 0 && settings.incrementKg <= 100 ? settings.incrementKg : 2.5;
   const lastBackupAt = settings.lastBackupAt == null || safeDate(settings.lastBackupAt) ? (settings.lastBackupAt ?? null) : null;
+  const bodyweightKg = settings.bodyweightKg == null ? null : (finiteNumber(settings.bodyweightKg) && settings.bodyweightKg >= 20 && settings.bodyweightKg <= 400 ? settings.bodyweightKg : null);
   // Preserve known document fields only. Unknown future schema versions must be explicitly migrated.
   return { schemaVersion: DATA_SCHEMA_VERSION,
-    exercises: candidate.exercises.map(e=>({id:e.id,name:e.name.trim(),bodyPart:e.bodyPart,targetSets:e.targetSets,archived:e.archived,order:finiteNumber(e.order)?e.order:0})),
+    exercises: candidate.exercises.map(e=>({id:e.id,name:e.name.trim(),bodyPart:e.bodyPart,targetSets:e.targetSets,archived:e.archived,order:finiteNumber(e.order)?e.order:0,equipment:e.equipment??'auto'})),
     sessions: candidate.sessions.map(s=>({id:s.id,bodyPart:s.bodyPart,startedAt:s.startedAt,endedAt:s.endedAt ?? null,
-      sets:s.sets.map(t=>({id:t.id,exerciseId:t.exerciseId,setNumber:t.setNumber,weight:t.weight,reps:t.reps,createdAt:t.createdAt}))})),
-    settings: {incrementKg,lastBackupAt}
+      sets:s.sets.map(t=>({id:t.id,exerciseId:t.exerciseId,setNumber:t.setNumber,weight:t.weight,reps:t.reps,createdAt:t.createdAt,kind:t.kind??'working',rir:t.rir??null}))})),
+    settings: {incrementKg,lastBackupAt,bodyweightKg}
   };
 }
