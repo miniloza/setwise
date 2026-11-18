@@ -1,3 +1,16 @@
+# Setwise Fitness Tracker
+
+Current packaged build: **v1.3.0**
+
+This release adds:
+- Tiffany blue OLED theme
+- editable / resumable sessions
+- current bodyweight with dated history
+- adjustable rest timer
+- Working set / Warm-up / Drop set logging
+- half-rep tracking
+- body-part overview analytics with exercise detail
+
 # Setwise 1.2.0 — Personal Fitness Tracker
 
 A private, offline-first workout tracker for iPad. Pure black / light grey / pastel red theme.
