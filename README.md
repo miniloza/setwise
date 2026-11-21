@@ -1,6 +1,6 @@
 # Setwise Fitness Tracker
 
-Current packaged build: **v1.3.0**
+Current packaged build: **v1.4.0**
 
 This release adds:
 - Tiffany blue OLED theme

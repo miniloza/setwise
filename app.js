@@ -1,8 +1,10 @@
 import { GROUPS, DATA_SCHEMA_VERSION, loadData, writeData, validateData, makeId } from './db.js';
+import { orderSessionExercises } from './exercise-order.js';
+import { recommendEightRepTarget } from './strength-target.js';
 import { restStatus, formatCountdown, nextWorkoutTarget, nextSetTarget } from './progression.js';
 import { isWorking, isWarmup, isDrop, workingSets, topSet, exerciseAnalytics, exerciseType, exerciseHistory, bodyweightRelative, progressionAdvice, warmupPlan, sameOrdinalAverage, correspondingPrevious, bodyweightForDate, bodyPartSummary } from './analytics.js';
 
-const APP_VERSION = '1.3.0';
+const APP_VERSION = '1.4.0';
 const app = document.getElementById('app');
 const toastEl = document.getElementById('toast');
 const importInput = document.getElementById('import-file');
@@ -21,6 +23,7 @@ let busy = false;
 let toastTimer;
 let restStartAt = null;
 let restSessionId = null;
+let showAllExercises = false;
 
 const glyphs = {
   home:'<path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/>',
@@ -47,15 +50,7 @@ const glyphs = {
   clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
   play:'<path d="m8 5 11 7-11 7z"/>'
 };
-const BODY_ACCENTS = {
-  Chest:'M37 32c5-5 13-8 23-8s18 3 23 8l-10 9c-3-3-8-5-13-5s-10 2-13 5z',
-  Back:'M37 29c6-5 14-8 23-8s17 3 23 8l-7 13c-5-3-11-5-16-5s-11 2-16 5z',
-  Shoulders:'M28 29c5-5 10-7 15-7h5l-4 12H32zm44 0c-5-5-10-7-15-7h-5l4 12h12z',
-  Arms:'M29 34l9 4-4 17-8-3zm62 0-9 4 4 17 8-3z',
-  Legs:'M44 56h12l-3 30H40zm20 0h12l4 30H67z',
-  Core:'M48 36h24l-3 28H51z',
-  'Full Body':'M37 32c5-5 13-8 23-8s18 3 23 8l-10 9c-3-3-8-5-13-5s-10 2-13 5z M44 56h12l-3 30H40zm20 0h12l4 30H67z M29 34l9 4-4 17-8-3zm62 0-9 4 4 17 8-3z'
-};
+const BODY_ICON_FILES = {Chest:'chest',Back:'back',Shoulders:'shoulders',Arms:'arms',Legs:'legs',Core:'core','Full Body':'full-body'};
 
 function icon(name, size=20) { return `<svg aria-hidden="true" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${glyphs[name]||glyphs.activity}</svg>`; }
 function esc(value) { return String(value ?? '').replace(/[&<>"']/g, v=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[v])); }
@@ -88,7 +83,8 @@ async function commit(change) {
 function navItems() { return [['home','Overview','home'],['session','Workout','dumbbell'],['history','Sessions','history'],['insights','Analytics','trend'],['settings','Settings','settings']]; }
 function navigation(mobile=false) { return navItems().map(([key,label,glyph])=>`<button class="${mobile?'bottom-link':'nav-link'} ${view===key?'active':''}" data-action="nav" data-view="${key}" ${view===key?'aria-current="page"':''}>${icon(glyph,mobile?22:20)}<span>${label}</span>${key==='session'&&activeSession()?'<span class="nav-dot"></span>':''}</button>`).join(''); }
 function bodyPartIcon(group) {
-  return `<svg class="muscle-figure" viewBox="0 0 120 120" aria-hidden="true"><g fill="none" stroke="rgba(180,190,200,.55)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="60" cy="16" r="8"/><path d="M46 30c3-5 8-8 14-8s11 3 14 8l6 13-7 13-6 30H49l-6-30-7-13z"/><path d="M43 33 29 54m48-21 14 21M52 86l-8 22m24-22 8 22"/></g><path d="${BODY_ACCENTS[group]||BODY_ACCENTS['Full Body']}" fill="rgba(129,216,208,.88)" stroke="rgba(129,216,208,.0)"/></svg>`;
+  // Distinct front/back anatomical figures with Tiffany blue highlighted muscles.
+  return `<img class="muscle-figure" src="./icons/${BODY_ICON_FILES[group] || 'full-body'}.png" alt="" loading="lazy" decoding="async" />`;
 }
 function syncRestTimer() {
   const session = activeSession();
@@ -100,6 +96,10 @@ function updateRestTimer() {
   document.querySelectorAll('[data-rest-clock]').forEach(el=>{el.textContent=status?formatCountdown(status.seconds):'—';});
   document.querySelectorAll('.rest-tile').forEach(el=>el.classList.toggle('rest-ready',!!status?.ready));
   document.querySelectorAll('[data-current-time]').forEach(el=>el.textContent=formatTime(new Date()));
+  const session = activeSession();
+  const elapsed = session ? Math.max(0,Math.floor((Date.now()-Date.parse(session.startedAt))/1000)) : 0;
+  const timerText = `${String(Math.floor(elapsed/3600)).padStart(2,'0')}:${String(Math.floor(elapsed%3600/60)).padStart(2,'0')}:${String(elapsed%60).padStart(2,'0')}`;
+  document.querySelectorAll('[data-session-elapsed]').forEach(el=>el.textContent=timerText);
 }
 function prefillDraft() {
   if (!selectedExerciseId) return;
@@ -138,15 +138,17 @@ function renderHome() {
   return `<div class="page-enter"><div class="hero hero-lite"><div class="hero-copy"><div class="eyebrow"><span class="eyebrow-line"></span> YOUR FITNESS TRACKER</div><h1>Progress you can <em>feel.</em></h1><p>Log the work. Improve the load. Keep the data private.</p>${active?`<button class="btn btn-accent hero-button" data-action="resume">Resume ${esc(active.bodyPart)} session ${icon('arrow')}</button>`:''}</div><div class="hero-art minimalist-glow">${icon('trend',96)}</div></div><div class="stats-grid"><div class="stat"><span class="stat-label">SESSIONS <span>LAST 7 DAYS</span></span><strong>${weekly.length.toString().padStart(2,'0')}</strong></div><div class="stat"><span class="stat-label">SETS <span>LAST 7 DAYS</span></span><strong>${weeklySets.toString().padStart(2,'0')}</strong></div><div class="stat"><span class="stat-label">VOLUME <span>LAST 7 DAYS</span></span><strong>${fmtNum(weeklyVolume,0)}<small> kg</small></strong></div></div><div class="section-heading"><div><div class="eyebrow">WHAT ARE YOU TRAINING TODAY?</div><h2>Choose a body part</h2></div><span class="section-meta">${GROUPS.length} OPTIONS</span></div><div class="group-grid">${GROUPS.map(group=>{ const count=data.exercises.filter(e=>e.bodyPart===group&&!e.archived).length; const last=completed.find(s=>s.bodyPart===group); return `<button class="group-card group-card-figure" data-action="start" data-group="${esc(group)}"><div class="group-figure-wrap">${bodyPartIcon(group)}</div><h3>${esc(group)}</h3><div class="group-footer"><span>${count} exercises</span><span>${last?formatDate(last.endedAt,{day:'numeric',month:'short'}):'Not yet'}</span></div></button>`; }).join('')}</div></div>`;
 }
 function sessionExerciseGroups(session) {
-  const list = activeExercises().filter(e=>!e.archived || session.sets.some(t=>t.exerciseId===e.id));
-  return GROUPS.map(g => [g, list.filter(e=>e.bodyPart===g)]).filter(([,items])=>items.length);
+  const list = activeExercises();
+  const groups = showAllExercises ? [session.bodyPart,...GROUPS.filter(g=>g!==session.bodyPart)] : [session.bodyPart];
+  return groups.map(g => [g, orderSessionExercises(list.filter(e=>e.bodyPart===g),session,allCompleted(),g)]).filter(([,items])=>items.length);
 }
 function renderSession() {
   const s = activeSession();
   if(!s) return `<div class="page-enter"><div class="section-heading"><div><div class="eyebrow">START A SESSION</div><h1>Choose a body part</h1></div></div><div class="group-grid">${GROUPS.map(group=>`<button class="group-card compact group-card-figure" data-action="start" data-group="${esc(group)}"><div class="group-figure-wrap small">${bodyPartIcon(group)}</div><h3>${esc(group)}</h3></button>`).join('')}</div></div>`;
   if(selectedExerciseId && !getExercise(selectedExerciseId)) selectedExerciseId = null;
   if(!selectedExerciseId) {
-    return `<div class="page-enter"><div class="workout-strip"><div><div class="eyebrow">ACTIVE SESSION</div><h2>${esc(s.bodyPart)} day</h2><p class="subheading">${s.sets.length} sets recorded · Started ${formatTime(s.startedAt)}</p></div><div class="workout-strip-actions"><button class="btn btn-outline" data-action="finish-session">End session</button></div></div><div class="section-heading compact-head"><div><div class="eyebrow">CHOOSE AN EXERCISE</div><h2>Session exercises</h2></div><div class="right-stack"><button class="btn btn-outline btn-sm" data-action="nav" data-view="settings">Manage exercises</button><button class="btn btn-accent btn-sm" data-action="new-exercise" data-group="${esc(s.bodyPart)}">${icon('plus',17)} Add exercise</button></div></div><div class="exercise-groups">${sessionExerciseGroups(s).map(([group,items])=>`<section class="exercise-group-box"><div class="exercise-group-head"><strong>${esc(group)}</strong>${group!==s.bodyPart?'<span class="subtle-chip">Accessory</span>':''}</div><div class="exercise-picker">${items.map(e=>{const last=exerciseSessions(e.id,1)[0];const done=s.sets.filter(t=>t.exerciseId===e.id).length;const advice=progressionAdvice(data.sessions,e.id,data.settings.incrementKg);return `<button class="exercise-pick" data-action="open-exercise" data-id="${esc(e.id)}"><div class="exercise-pick-copy"><strong>${esc(e.name)}</strong><span>${last?`Last: ${formatDate(last.endedAt,{day:'numeric',month:'short'})}`:'No previous data'}</span><span class="exercise-pick-goal">${esc(advice.title)}</span></div>${done?`<span class="completed-tag">${done} logged</span>`:`<span class="exercise-target">${e.targetSets} planned</span>`}${icon('chevron',18)}</button>`;}).join('')}</div></section>`).join('')}</div></div>`;
+    const grouped = sessionExerciseGroups(s);
+    return `<div class="page-enter"><div class="workout-strip"><div><div class="eyebrow">ACTIVE SESSION</div><h2>${esc(s.bodyPart)} day</h2><p class="subheading">${s.sets.length} sets recorded · Started ${formatTime(s.startedAt)}</p></div><div class="workout-strip-actions"><button class="btn btn-outline" data-action="finish-session">End session</button></div></div><div class="section-heading compact-head"><div><div class="eyebrow">CHOOSE AN EXERCISE</div><h2>Session exercises</h2></div><div class="right-stack"><button class="btn btn-outline btn-sm" data-action="nav" data-view="settings">Manage exercises</button><button class="btn btn-accent btn-sm" data-action="new-exercise" data-group="${esc(s.bodyPart)}">${icon('plus',17)} Add exercise</button></div></div><div class="exercise-groups">${grouped.map(([group,items])=>`<section class="exercise-group-box"><div class="exercise-group-head"><strong>${esc(group)}</strong>${group!==s.bodyPart?'<span class="subtle-chip">Accessory</span>':''}</div><div class="exercise-picker">${items.map((e,i)=>{const last=exerciseSessions(e.id,1)[0];const done=s.sets.filter(t=>t.exerciseId===e.id).length;const advice=progressionAdvice(data.sessions,e.id,data.settings.incrementKg);return `<button class="exercise-pick" data-action="open-exercise" data-id="${esc(e.id)}"><div class="exercise-pick-copy"><strong>${esc(e.name)}</strong><span>${last?`Last: ${formatDate(last.endedAt,{day:'numeric',month:'short'})}`:'No previous data'}</span><span class="exercise-pick-goal">${esc(advice.title)}</span></div>${done?`<span class="completed-tag">${done} logged</span>`:i===0?'<span class="exercise-target">NEXT</span>':`<span class="exercise-target">${e.targetSets} planned</span>`}${icon('chevron',18)}</button>`;}).join('')}</div></section>`).join('')}</div><button class="btn btn-outline wide show-all-exercises" data-action="toggle-all-exercises">${showAllExercises?`Show ${esc(s.bodyPart)} exercises only`:'Show all exercises'}</button></div>`;
   }
   const e = getExercise(selectedExerciseId);
   const allSets = currentExerciseSets();
@@ -155,7 +157,7 @@ function renderSession() {
   const prev = correspondingPrevious(data.sessions, e.id, ordinal);
   const avg = sameOrdinalAverage(data.sessions, e.id, ordinal);
   const plan = progressionAdvice(data.sessions, e.id, data.settings.incrementKg);
-  const liveTarget = nextSetTarget(allSets, allCompleted(), e.id, data.settings.incrementKg);
+  const liveTarget = recommendEightRepTarget(allCompleted(), e.id, allSets, data.settings.incrementKg);
   const six = exerciseAnalytics(data.sessions,e.id).strongest?.six ?? null;
   if(!draft || draft.exerciseId!==e.id || draft.setNumber!==nextSetNumber(e.id)) prefillDraft();
   const type = draft.kind;
@@ -164,7 +166,7 @@ function renderSession() {
   const targetRepText = type==='warmup' ? 'Warm-up' : '6–10';
   const prevValue = prev ? `${fmtNum(prev.weight)} kg × ${prev.reps}${prev.partials?` + ${prev.partials}/5`:''}` : 'Not logged';
   const avgValue = avg ? `${fmtNum(avg.weight)} kg × ${fmtNum(avg.reps)} reps` : 'Not enough data';
-  return `<div class="page-enter workout-page"><div class="workout-sticky"><div class="workout-sticky-head"><div><div class="eyebrow">SETWISE / ${esc(s.bodyPart.toUpperCase())} DAY</div><h2>${esc(e.name)} <small>· Set ${draft.setNumber}</small></h2></div><div class="clock-wrap"><span>Current time</span><strong data-current-time>--:--</strong></div></div><form id="log-set-form"><div class="banner-grid"><div class="banner-tile"><label>Weight / kg</label><div class="banner-stepper"><button type="button" data-action="step" data-field="weight" data-delta="-1">−</button><input id="weight-input" type="number" inputmode="decimal" step="any" min="0" value="${draft.weight}"/><button type="button" data-action="step" data-field="weight" data-delta="1">+</button></div></div><div class="banner-tile"><label>Reps</label><div class="banner-stepper"><button type="button" data-action="step" data-field="reps" data-delta="-1">−</button><input id="reps-input" type="number" inputmode="numeric" step="1" min="1" value="${draft.reps}"/><button type="button" data-action="step" data-field="reps" data-delta="1">+</button></div></div><div class="banner-tile rest-tile"><label>Rest</label><div class="banner-readout"><strong data-rest-clock>—</strong></div></div><div class="banner-tile"><label>Target</label><div class="banner-readout"><strong>${targetRepText}</strong></div></div></div>${type==='drop'?`<div class="drop-grid">${draft.dropSets.map((row,i)=>`<div class="drop-row"><span>Drop ${i+1}</span><input type="number" id="drop-weight-${i}" data-drop-index="${i}" data-drop-field="weight" min="0" step="any" value="${row.weight}" placeholder="kg"/><input type="number" id="drop-reps-${i}" data-drop-index="${i}" data-drop-field="reps" min="1" step="1" value="${row.reps}" placeholder="reps"/></div>`).join('')}</div>`:''}<div class="banner-actions"><button class="btn btn-accent" type="submit" value="set">Save & next set ${icon('arrow',17)}</button><button class="btn btn-outline" type="submit" value="exercise">Save & next exercise ${icon('arrow',17)}</button></div><div class="workout-tiny-controls"><span>${working.length} working · ${data.exercises.find(x=>x.id===e.id)?.targetSets ?? 3} planned</span><div><button type="button" data-action="choose-exercise">Next exercise</button><button type="button" data-action="finish-session">End session</button></div></div></form></div><div class="workout-content"><div class="block-title">01 / YOUR BASELINE · WORKING SET ${ordinal}</div><div class="workout-compare"><div class="comp-card"><span>Recent average</span><strong>${esc(avgValue)}</strong><small>Comparable working sets only</small></div><div class="comp-card"><span>Previous workout</span><strong>${esc(prevValue)}</strong><small>Last completed session</small></div></div><div class="effort-panel"><div><strong>SET TYPE</strong><div class="set-type-buttons">${['working','warmup','drop'].map(k=>`<button type="button" class="set-type ${type===k?'active':''}" data-action="set-kind" data-kind="${k}">${k==='working'?'Working set':k==='warmup'?'Warm-up':'Drop set'}</button>`).join('')}</div></div>${showHalfReps?`<div><strong>HALF REPS (0–5)</strong><div class="rir-options">${[0,1,2,3,4,5].map(v=>`<button type="button" class="rir-option ${draft.partials===v?'active':''}" data-action="set-partials" data-partials="${v}">${v}</button>`).join('')}</div></div>`:''}</div><div class="target-duo"><div class="coach-minimal"><span>02 / 6 REP MAX</span><strong>${six?`${fmtNum(six)} kg`:'Need more data'}</strong><p>${six?'Estimated from your strongest comparable working set.':'Complete a few weighted working sets to build this estimate.'}</p></div><div class="coach-minimal"><span>03 / NEXT SET</span><strong>${esc(liveTarget.title)}</strong><p>${esc(liveTarget.description)}</p></div></div><details class="workout-set-history"><summary>${savedCount} sets logged · tap for history and corrections</summary><div class="set-list">${allSets.map(t=>`<div class="set-row"><span>${t.kind==='warmup'?'Warm-up':t.kind==='drop'?'Drop set':'Working set'} ${t.setNumber}${t.partials?` · ${t.partials}/5 half reps`:''}</span><strong>${fmtNum(t.weight)} kg × ${t.reps}</strong><button class="icon-button" data-action="edit-set" data-id="${esc(t.id)}" data-session="${esc(s.id)}">${icon('edit',16)}</button></div>`).join('') || '<div class="empty-mini">No sets logged yet</div>'}</div>${allSets.length?`<button class="subtle-action" data-action="undo-set">Delete last set</button>`:''}</details></div></div>`;
+  return `<div class="page-enter workout-page"><div class="workout-sticky"><div class="workout-sticky-head"><div><div class="eyebrow">SETWISE / ${esc(s.bodyPart.toUpperCase())} DAY</div><h2>${esc(e.name)} <small>· Set ${draft.setNumber}</small></h2></div><div class="session-elapsed" role="timer" aria-label="Session elapsed time"><span>SESSION TIME</span><strong data-session-elapsed>00:00:00</strong></div><div class="clock-wrap"><span>Current time</span><strong data-current-time>--:--</strong></div></div><form id="log-set-form"><div class="banner-grid"><div class="banner-tile"><label>Weight / kg</label><div class="banner-stepper"><button type="button" data-action="step" data-field="weight" data-delta="-1">−</button><input id="weight-input" type="number" inputmode="decimal" step="any" min="0" value="${draft.weight}"/><button type="button" data-action="step" data-field="weight" data-delta="1">+</button></div></div><div class="banner-tile"><label>Reps</label><div class="banner-stepper"><button type="button" data-action="step" data-field="reps" data-delta="-1">−</button><input id="reps-input" type="number" inputmode="numeric" step="1" min="1" value="${draft.reps}"/><button type="button" data-action="step" data-field="reps" data-delta="1">+</button></div></div><div class="banner-tile rest-tile"><label>Rest</label><div class="banner-readout"><strong data-rest-clock>—</strong></div></div><div class="banner-tile"><label>Target</label><div class="banner-readout"><strong>${targetRepText}</strong></div></div></div>${type==='drop'?`<div class="drop-grid">${draft.dropSets.map((row,i)=>`<div class="drop-row"><span>Drop ${i+1}</span><input type="number" id="drop-weight-${i}" data-drop-index="${i}" data-drop-field="weight" min="0" step="any" value="${row.weight}" placeholder="kg"/><input type="number" id="drop-reps-${i}" data-drop-index="${i}" data-drop-field="reps" min="1" step="1" value="${row.reps}" placeholder="reps"/></div>`).join('')}</div>`:''}<div class="effort-panel"><div><strong>SET TYPE</strong><div class="set-type-buttons">${['working','warmup','drop'].map(k=>`<button type="button" class="set-type ${type===k?'active':''}" data-action="set-kind" data-kind="${k}">${k==='working'?'Working set':k==='warmup'?'Warm-up':'Drop set'}</button>`).join('')}</div></div>${showHalfReps?`<div><strong>HALF REPS (0–5)</strong><div class="rir-options">${[0,1,2,3,4,5].map(v=>`<button type="button" class="rir-option ${draft.partials===v?'active':''}" data-action="set-partials" data-partials="${v}">${v}</button>`).join('')}</div></div>`:''}</div><div class="banner-actions"><button class="btn btn-accent" type="submit" value="set">Save & next set ${icon('arrow',17)}</button><button class="btn btn-outline" type="submit" value="exercise">Save & next exercise ${icon('arrow',17)}</button></div><div class="workout-tiny-controls"><span>${working.length} working · ${data.exercises.find(x=>x.id===e.id)?.targetSets ?? 3} planned</span><div><button type="button" data-action="choose-exercise">Next exercise</button><button type="button" data-action="finish-session">End session</button></div></div></form></div><div class="workout-content"><div class="block-title">01 / YOUR BASELINE · WORKING SET ${ordinal}</div><div class="workout-compare"><div class="comp-card"><span>Recent average</span><strong>${esc(avgValue)}</strong><small>Comparable working sets only</small></div><div class="comp-card"><span>Previous workout</span><strong>${esc(prevValue)}</strong><small>Last completed session</small></div></div><div class="target-duo"><div class="coach-minimal"><span>02 / 6 REP MAX</span><strong>${six?`${fmtNum(six)} kg`:'Need more data'}</strong><p>${six?'Estimated from your strongest comparable working set.':'Complete a few weighted working sets to build this estimate.'}</p></div><div class="coach-minimal"><span>03 / NEXT SET</span><strong>${esc(liveTarget.title)}</strong><p>${esc(liveTarget.description)}</p></div></div><details class="workout-set-history"><summary>${savedCount} sets logged · tap for history and corrections</summary><div class="set-list">${allSets.map(t=>`<div class="set-row"><span>${t.kind==='warmup'?'Warm-up':t.kind==='drop'?'Drop set':'Working set'} ${t.setNumber}${t.partials?` · ${t.partials}/5 half reps`:''}</span><strong>${fmtNum(t.weight)} kg × ${t.reps}</strong><button class="icon-button" data-action="edit-set" data-id="${esc(t.id)}" data-session="${esc(s.id)}">${icon('edit',16)}</button></div>`).join('') || '<div class="empty-mini">No sets logged yet</div>'}</div>${allSets.length?`<button class="subtle-action" data-action="undo-set">Delete last set</button>`:''}</details></div></div>`;
 }
 function renderHistory() {
   const sessions = allCompleted();
@@ -280,16 +282,17 @@ app.addEventListener('click', async event => {
       const active=activeSession();
       if(active && active.bodyPart!==group){ notify(`Finish or resume your current ${active.bodyPart} session first.`, true); view='session'; selectedExerciseId=null; render(); break; }
       if(!active) { const ok = await commit(d=>d.sessions.push({id:makeId(),bodyPart:group,startedAt:new Date().toISOString(),endedAt:null,sets:[]})); if(!ok) break; }
-      selectedExerciseId=null; draft=null; view='session'; render(); break;
+      selectedExerciseId=null; draft=null; showAllExercises=false; view='session'; render(); break;
     }
     case 'resume': view='session'; selectedExerciseId=null; draft=null; render(); break;
     case 'resume-session': {
       const active=activeSession(); if(active && active.id!==id){ notify('Finish or discard the current active session first.',true); break; }
       const ok=await commit(d=>{ const s=d.sessions.find(x=>x.id===id); if(s) s.endedAt=null; });
-      if(ok){ view='session'; historySessionId=null; selectedExerciseId=null; draft=null; render(); notify('Session reopened.'); }
+      if(ok){ view='session'; historySessionId=null; selectedExerciseId=null; draft=null; showAllExercises=false; render(); notify('Session reopened.'); }
       break;
     }
     case 'choose-exercise': selectedExerciseId=null; draft=null; render(); break;
+    case 'toggle-all-exercises': showAllExercises=!showAllExercises; render(); break;
     case 'open-exercise': selectedExerciseId=id; draft=null; prefillDraft(); render(); break;
     case 'set-kind': if(draft){ draft.kind = el.dataset.kind; if(draft.kind==='warmup') draft.partials = 0; render(); } break;
     case 'set-partials': if(draft){ draft.partials = Number(el.dataset.partials); render(); } break;
@@ -306,7 +309,7 @@ app.addEventListener('click', async event => {
       if(!s.sets.length) { if(!confirm('No sets have been recorded. Discard this empty session?')) break; const ok=await commit(d=>{d.sessions=d.sessions.filter(x=>x.id!==s.id);}); if(ok){selectedExerciseId=null;view='home';render();notify('Empty session discarded.');} break; }
       if(!confirm(`End ${s.bodyPart} session with ${s.sets.length} recorded sets?`)) break;
       const ok=await commit(d=>{ d.sessions.find(t=>t.id===s.id).endedAt=new Date().toISOString(); });
-      if(ok){ selectedExerciseId=null; draft=null; restStartAt=null; restSessionId=null; historySessionId=s.id; view='history'; render(); notify('Session ended and saved.'); }
+      if(ok){ selectedExerciseId=null; draft=null; restStartAt=null; restSessionId=null; historySessionId=s.id; view='history'; showAllExercises=false; render(); notify('Session ended and saved.'); }
       break;
     }
     case 'undo-set': {

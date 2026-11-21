@@ -143,3 +143,21 @@ input,select,.dialog form input,.dialog form select,.preferences-form input{back
 
 /* v1.3 additions */
 .hero-lite{align-items:center}.minimalist-glow{display:grid;place-items:center;color:var(--accent);opacity:.9}.group-card-figure{min-height:240px;position:relative;overflow:hidden}.group-figure-wrap{height:120px;display:grid;place-items:center;opacity:.98}.group-figure-wrap.small{height:92px}.muscle-figure{width:110px;height:110px;filter:drop-shadow(0 0 18px rgba(129,216,208,.14))}.exercise-groups{display:grid;gap:16px}.exercise-group-box{border:1px solid var(--line);border-radius:16px;padding:12px;background:var(--panel)}.exercise-group-head{display:flex;align-items:center;justify-content:space-between;padding:6px 8px 12px}.exercise-group-head strong{font-size:15px}.subtle-chip{font-size:10px;letter-spacing:.08em;padding:6px 8px;border-radius:999px;background:#102125;border:1px solid #234649;color:var(--accent);text-transform:uppercase}.right-stack{display:flex;gap:8px;flex-wrap:wrap}.banner-grid{grid-template-columns:1.2fr 1.2fr .8fr .8fr}.target-duo{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}.drop-grid{margin-top:10px;display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.drop-row{border:1px solid #2f4f4f;border-radius:10px;padding:10px;background:#000;display:grid;gap:8px}.drop-row span{font-size:11px;font-weight:800;letter-spacing:.08em;color:var(--accent);text-transform:uppercase}.drop-row input{width:100%;min-height:44px;padding:10px;border-radius:8px;border:1px solid #365d5f;background:#000;color:#ddd}.group-summary-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.summary-exercise-card{border:1px solid #2f4f4f;border-radius:12px;padding:14px;background:#000;color:#ddd;text-align:left}.summary-exercise-card.active{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}.summary-exercise-card strong{display:block;margin-bottom:8px}.summary-exercise-card span{display:block;font-size:12px;color:#aeb7b8;margin-top:3px}.inline-card{margin-bottom:0}.bodyweight-history{display:grid;gap:8px;margin-top:12px}.bodyweight-history div{display:flex;justify-content:space-between;gap:12px;padding:10px 12px;border:1px solid #2f4f4f;border-radius:10px;background:#000}.bodyweight-history span{font-weight:700;color:#ddd}.bodyweight-history small{color:#94a1a3}.hero-art svg{stroke-width:1.4}@media(max-width:1000px){.group-summary-grid,.target-duo{grid-template-columns:1fr}.drop-grid{grid-template-columns:1fr}.exercise-group-head,.section-heading{align-items:start}.right-stack{width:100%}}@media(max-width:700px){.group-grid{grid-template-columns:1fr 1fr}.banner-grid{grid-template-columns:1fr 1fr}.group-card-figure{min-height:220px}.banner-actions{grid-template-columns:1fr}.workout-compare{grid-template-columns:1fr}}@media(max-width:520px){.group-grid,.stats-grid,.group-summary-grid{grid-template-columns:1fr}.drop-grid,.target-duo{grid-template-columns:1fr}.group-figure-wrap{height:100px}}
+/* v1.4: requested workout control relocation, session clock and anatomy artwork only */
+.muscle-figure{display:block;width:110px;height:120px;max-width:100%;object-fit:contain;filter:none}
+.session-elapsed{min-width:125px;align-self:center;text-align:center;padding:4px 10px}
+.session-elapsed span{display:block;color:#aebfc0;letter-spacing:.11em;font-size:10px;font-weight:800}
+.session-elapsed strong{display:block;font-size:19px;font-variant-numeric:tabular-nums;letter-spacing:.02em;color:var(--accent);margin-top:3px}
+.workout-sticky .effort-panel{margin-top:9px;margin-bottom:0;padding:11px 12px;background:#000;border-color:#2f4f4f;gap:10px}
+.workout-sticky .set-type-buttons,.workout-sticky .rir-options{margin-top:7px}
+.workout-sticky .set-type,.workout-sticky .rir-option{min-height:38px;padding:8px 11px}
+.show-all-exercises{display:flex;width:100%;margin-top:16px}
+@media(max-width:700px){
+ .session-elapsed{min-width:82px;padding:2px 3px}
+ .session-elapsed strong{font-size:15px}
+ .session-elapsed span{font-size:9px}
+ .workout-sticky-head h2{font-size:14px}
+ .workout-sticky .effort-panel{align-items:start;gap:10px}
+ .workout-sticky .rir-option{min-width:35px;padding:7px 9px}
+ .workout-sticky{max-height:calc(100dvh - 75px);overflow-y:auto}
+}
